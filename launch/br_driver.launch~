@@ -21,7 +21,12 @@
 
   <!-- copy the specified IP address to be consistant with ROS-Industrial spec. -->
     <param name="robot_ip_address" type="str" value="$(arg robot_ip)" />
-    <param name="port2" type="int" value="$(arg port)" />
+    <param name="commuinication_port" type="int" value="$(arg port)" />
 
   </node>
+
+
+<rosparam command="load" file="$(find rosparam)/example.yaml" />
+
+
 </launch>

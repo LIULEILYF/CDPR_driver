@@ -17,13 +17,15 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   genmsg ${MSG_DEPS}
   cmake_modules
+  tf
 )
 
 find_package(TinyXML REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-
+find_package(VISP REQUIRED)
+find_library(VISP_LIBRARY NAMES visp HINTS ${VISP_LIBRARY_DIRS} )
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -55,11 +57,12 @@ find_package(TinyXML REQUIRED)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
+ add_message_files(
+   FILES
+   CartesianTrajectory.msg
+   CartesianTrajectoryPoint.msg
 #   Message2.msg
-# )
+ )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -76,10 +79,7 @@ find_package(TinyXML REQUIRED)
 # )
 
 ## Generate added messages and services with any dependencies listed here
- #generate_messages(
- #  DEPENDENCIES
- #  ${MSG_DEPS}
- #)
+ generate_messages( DEPENDENCIES  ${MSG_DEPS} )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -174,6 +174,10 @@ target_link_libraries(server_sample ${catkin_LIBRARIES} )
 
 add_executable(simple_controller src/simple_controller.cpp)
 target_link_libraries(simple_controller ${catkin_LIBRARIES} )
+
+add_executable(br_controller src/br_controller.cpp)
+target_link_libraries(br_controller ${catkin_LIBRARIES} ${VISP_LIBRARY})
+
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above

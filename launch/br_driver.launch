@@ -1,18 +1,15 @@
-<?xml version="1.0"?>
-<!--
-  Universal robot common bringup.  Starts ur driver node and robot state
-  publisher (translates joint positions to propper tfs).
-  
-  Usage:
-    ur_common.launch robot_ip:=<value>
--->
 <launch>
+
+<node pkg="tf" type="static_transform_publisher" name="wTp_intial_bdcaster" args="0.5 0.5 0 0 0 0 1 world platform 100"/>
+
   <!-- robot_ip: IP-address of the robot's socket-messaging server -->
   <arg name="robot_ip" />
   <arg name="port" />
+  <arg name="cables" default="8"/>
     
   <!-- The max_velocity parameter is only used for debugging in the ur_driver. It's not related to actual velocity limits -->
   <arg name="max_velocity" default="10.0"/> <!-- [rad/s] -->
+    <param name="number_of_cables" type="int" value="$(arg cables)"/>
 
 <!--  <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" /> -->
 
@@ -24,4 +21,9 @@
     <param name="commuinication_port" type="int" value="$(arg port)" />
 
   </node>
+
+
+	<rosparam command="load" file="$(find br_driver)/config/robot_parameters.yaml" />
+
+
 </launch>
