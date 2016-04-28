@@ -27,7 +27,7 @@ private:
 
     bool jointStateReceived;
     bool keepalive_;
-
+    bool debug_;
     int status; // Robot status
 
     // Parsing functions
@@ -35,7 +35,7 @@ private:
     void extract_robot_state(TiXmlElement* root,std::string State);
     std::string pack_joint_message(); // pack the message
 
-
+    void check_attribute(int attribute);
 
 public:
     BRrobot(ros::NodeHandle nh_,std::string host, int reverse_port);
@@ -45,10 +45,11 @@ public:
     int new_sockfd_;
     const unsigned int REVERSE_PORT_;
 
-    sensor_msgs::JointState desired_joint_deviation; // Declaration of message
+    sensor_msgs::JointState desired_joint_position; // Declaration of message
     sensor_msgs::JointState robot_state;
 
-
+    std::vector<bool> Motor_Control;
+    bool All_Motor_Control;
     void SetJointFlag(bool Flag); // Set jointrecieved flag
     bool GetJointFlag(); // Get the joint recieved flag
     int GetStatus(); // Set the status flag

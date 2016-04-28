@@ -7,11 +7,72 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <iostream>
+#include <tinyxml.h>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string/regex.hpp>
+#include "boost/lexical_cast.hpp"
+
 
 void error(const char *msg)
 {
     perror(msg);
     exit(0);
+}
+
+float RandomFloat(float a, float b) {
+    float random = ((float) rand()) / (float) RAND_MAX;
+    float diff = b - a;
+    float r = random * diff;
+    return a + r;
+}
+
+
+std::vector<double> q{-0.87,-71.98,-116.38,-80.73,90.10,131.21,-54.0,10.131};
+std::vector<double> dq{0.001,0.001,0.003,-0.001,0.005,0.001,0.0012,-0.0045};
+
+std::string pack_message()
+{
+
+
+    std::string message;
+    float floatvalue;
+    TiXmlDocument doc;
+    TiXmlElement* ROS_PLC=new TiXmlElement("PLC_ROS");
+    TiXmlElement* Cables_xml=new TiXmlElement("Cables_FB");
+
+    doc.LinkEndChild(ROS_PLC);
+    ROS_PLC->LinkEndChild(Cables_xml);
+
+    for (int i = 0; i < 8; ++i) {
+        std::string element_name="Q"+
+                boost::lexical_cast<std::string>(i+1);
+        TiXmlElement* Qi=new TiXmlElement(element_name);
+        TiXmlElement* Position=new TiXmlElement("Position");
+        TiXmlElement* Velocity=new TiXmlElement("Vitesse");
+        TiXmlElement* Torque=new TiXmlElement("Couple");
+        floatvalue=RandomFloat(q[i]-dq[i],q[i]+1.5*dq[i]);
+        q[i]=floatvalue;
+        Position->SetAttribute("V",boost::lexical_cast<std::string>(floatvalue));
+        floatvalue=RandomFloat(-3.0,3.0);
+        Velocity->SetAttribute("V",boost::lexical_cast<std::string>(floatvalue));
+        floatvalue=RandomFloat(-10.0,10.0);
+        Torque->SetAttribute("V",boost::lexical_cast<std::string>(floatvalue));
+        Cables_xml->LinkEndChild(Qi);
+        Qi->LinkEndChild(Position);
+        Qi->LinkEndChild(Velocity);
+        Qi->LinkEndChild(Torque);
+    }
+
+
+    TiXmlPrinter printer;
+    //doc.Print();
+    doc.Accept( &printer );
+    message = printer.CStr();
+    //std::cout<<"message "<<message<<std::endl;
+
+    return message;
 }
 
 int main(int argc, char *argv[])
@@ -44,38 +105,29 @@ int main(int argc, char *argv[])
         error("ERROR connecting");
 
 
-    int i=0;
+
     char const * re;
+    std::string msg;
     while(1)
     {
-        switch (i % 4) {
-        case 0:
-            std::cout<<" Case 0 "<<std::endl;
-            re="<Position M1=\"0.01\" M2=\"0.02\" M3=\"0.03\" M4=\"0.04\" M5=\"0.05\" M6=\"0.06\" M7=\"0.07\" M8=\"0.08\"/>\n\0";
-            break;
-        case 1:
-            std::cout<<" Case 1 "<<std::endl;
-            re="<Velocity M1=\"0.1\" M4=\"0.4\" M5=\"0.5\" M6=\"0.6\" M7=\"0.7\" M2=\"0.2\" M3=\"0.3\"  M8=\"0.8\"/>\n\0";
-            break;
-        case 2:
-            std::cout<<" Case 2 "<<std::endl;
-             re="<Torque M1=\"1\" M2=\"2\" M3=\"3\" M4=\"4\" M5=\"5\" M6=\"6\" M7=\"7\" M8=\"8\"/>\n\0";
-            break;
-          default:
-            break;
-        }
-        std::cout<<"i = "<<i<<" i % 3"<<i % 3<<std::endl;
-
+        msg="";
+        msg=pack_message();
+        msg=msg+"\0";
+        re=msg.c_str();
+        std::cout<<strlen(re)<<std::endl;
         n = write(sockfd,re,strlen(re));
+
+        std::cout<<"Writing to socket"<<msg<<std::endl;
         if (n < 0)
             error("ERROR writing to socket");
-        bzero(buffer,256);
-        n = read(sockfd,buffer,255);
-        if (n < 0)
-            error("ERROR reading from socket");
-        printf("%s\n",buffer);
-        sleep(1);
-        i++;
+        bzero(buffer,10000);
+        //n = read(sockfd,buffer,255);
+        //if (n < 0)
+          //  error("ERROR reading from socket");
+
+        //usleep(5000);
+        usleep(10000);
+
 
     }
     close(sockfd);

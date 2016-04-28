@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/dist-packages/spyderlib/spyder.py", line 2152, in main
+    mainwindow = run_spyder(app, options, args)
+  File "/usr/lib/python2.7/dist-packages/spyderlib/spyder.py", line 2047, in run_spyder
+    main.setup()
+  File "/usr/lib/python2.7/dist-packages/spyderlib/spyder.py", line 943, in setup
+    for mod in get_spyderplugins_mods(prefix='p_', extension='.py'):
+  File "/usr/lib/python2.7/dist-packages/spyderlib/otherplugins.py", line 53, in get_spyderplugins_mods
+    __import__(name)
+  File "/usr/lib/python2.7/dist-packages/spyderplugins/p_pylint.py", line 23, in <module>
+    from spyderplugins.widgets.pylintgui import PylintWidget, PYLINT_PATH
+  File "/usr/lib/python2.7/dist-packages/spyderplugins/widgets/pylintgui.py", line 63, in <module>
+    PYLINT_VER = get_pylint_version()
+  File "/usr/lib/python2.7/dist-packages/spyderplugins/widgets/pylintgui.py", line 55, in get_pylint_version
+    lines = to_unicode_from_fs(process.stdout.read()).splitlines()
+KeyboardInterrupt

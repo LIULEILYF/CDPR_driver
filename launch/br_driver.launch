@@ -1,6 +1,8 @@
 <launch>
 
-<node pkg="tf" type="static_transform_publisher" name="wTp_intial_bdcaster" args="0.5 0.5 0 0 0 0 1 world platform 100"/>
+
+<!--Démonstrateur: port 50011-->
+<!--Rocket (grand robot); port 50010-->
 
   <!-- robot_ip: IP-address of the robot's socket-messaging server -->
   <arg name="robot_ip" />

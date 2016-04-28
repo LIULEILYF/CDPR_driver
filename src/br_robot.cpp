@@ -8,6 +8,8 @@
 #include <netinet/tcp.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string/regex.hpp>
 
 
 #include <tinyxml.h>
@@ -22,7 +24,7 @@
 BRrobot::BRrobot(ros::NodeHandle nh_, std::string host, int reverse_port) : nh(nh_) ,REVERSE_PORT_(reverse_port)
 {
     kill_signal=false;
-
+    debug_=1;
     struct sockaddr_in serv_addr; // a structure containing the socket information
     socklen_t clilen;
     int n, flag;
@@ -59,7 +61,7 @@ BRrobot::BRrobot(ros::NodeHandle nh_, std::string host, int reverse_port) : nh(n
     listen(incoming_sockfd_, 5);
     keepalive_=false;
 
-    joint_sub = nh.subscribe("/joint_deviation", 1, &BRrobot::JointDeviationCallback, this);
+    joint_sub = nh.subscribe("/desired_joint_position", 1, &BRrobot::JointDeviationCallback, this);
     robot_state_pub=nh.advertise<sensor_msgs::JointState>("/joint_state",1);
 
     // Names of joints
@@ -72,11 +74,13 @@ BRrobot::BRrobot(ros::NodeHandle nh_, std::string host, int reverse_port) : nh(n
     robot_state.name.push_back("q7");
     robot_state.name.push_back("q8");
 
-    for (int i = 0; i < 8; ++i) {
-        robot_state.position.push_back(0);
-        robot_state.velocity.push_back(0);
-        robot_state.effort.push_back(0);
-    }
+    Motor_Control.resize(8);
+    All_Motor_Control=true;
+
+
+    robot_state.position.resize(8);
+    robot_state.velocity.resize(8);
+    robot_state.effort.resize(8);
 
     SetStatus(PENDING_CONNECTION);
 }
@@ -148,28 +152,9 @@ void BRrobot::readData() // function to start commuinication
 
         timeout.tv_sec = 0; //do this each loop as selects modifies timeout
         timeout.tv_usec = 500000; // timeout of 0.5 sec
-        /* Details about select function :
-        The select() function gives you a way to simultaneously
-        check multiple sockets to see if they have data waiting to
-        be recv()d, or if you can send() data to them without blocking,
-        or if some exception has occurred. You populate your sets of socket
-        descriptors using the macros, like FD_SET(), above. Once you have the
-        set, you pass it into the function as one of the following parameters:
-        readfds if you want to know when any of the sockets in the set is ready
-        to recv() data, writefds if any of the sockets is ready to send() data to,
-        and/or exceptfds if you need to know when an exception (error) occurs on any of
-        the sockets. Any or all of these parameters can be NULL if you're not interested
-        in those types of events. After select() returns, the values in the sets will
-        be changed to show which are ready for reading or writing, and which have exceptions.
-        The first parameter, n is the highest-numbered socket descriptor (they're just ints,
-        remember?) plus one. Lastly, the struct timeval, timeout, at the end—this lets you
-        tell select() how long to check these sets for.
-        It'll return after the timeout, or when an event occurs, whichever is first.
-        The struct timeval has two fields: tv_sec is the number of seconds, to which is
-        added tv_usec, the number of microseconds (1,000,000 microseconds in a second.)
-         */
+
         select(new_sockfd_ + 1, &readfds, NULL, NULL, &timeout);
-        n = read(new_sockfd_,buffer,255);
+        n = read(new_sockfd_,buffer,1500); // this was 1000 and working BR
 
         if (n < 0)
         {
@@ -178,11 +163,14 @@ void BRrobot::readData() // function to start commuinication
         }
 
         std::string p(buffer);
+
+        //std::cout<<"p "<<p<<std::endl;
+
         std::vector<std::string> strs;
-        boost::split(strs, p, boost::is_any_of("\0"));
+        boost::algorithm::split_regex(strs, p, boost::regex("</PLC_ROS>"));
 
-
-        for (int i = 0; i < strs.size(); ++i) {
+        for (int i = 0; i < strs.size()-1; ++i) {
+        //    std::cout<<"strs[ "<<i<<" ]= "<<strs[i]<<std::endl;
             unpack_message(strs[i]);
         }
 
@@ -191,64 +179,228 @@ void BRrobot::readData() // function to start commuinication
 }
 
 //
-
 void BRrobot::unpack_message(std::string p)
 {
-
     TiXmlDocument doc;
-    TiXmlElement* root;
     const char* pTest =doc.Parse(p.c_str(), 0, TIXML_ENCODING_UTF8);
-    std::vector<std::string> data;
-    data.push_back("Position");
-    data.push_back("Velocity");
-    data.push_back("Torque");
+    bool bool_value;
+    float float_value;
 
-    for (int i = 0; i < 3; ++i) {
-        root = doc.FirstChildElement( data[i]);
-        if(root)
+    TiXmlElement* PLC_ROS=doc.FirstChildElement("PLC_ROS");
+
+  //  doc.Print();
+
+    // Looking under the PLC_ROS tag
+    if(PLC_ROS)
+    {
+    //    ROS_INFO("PLC_ROS exists");
+        TiXmlElement* Cables_FB=PLC_ROS->FirstChildElement("Cables_FB");
+        // Looking under the Cable tag
+        if(Cables_FB)
         {
-            extract_robot_state(root,data[i]);
+         //  ROS_INFO("Cables_FB exists");
+            // Check control tabs
+            TiXmlElement* All_Motors_Controlled=PLC_ROS->FirstChildElement("All_Motors_Controlled");
+            if(All_Motors_Controlled)
+            {
+                check_attribute(All_Motors_Controlled->
+                                QueryBoolAttribute("V",&bool_value));
+                All_Motor_Control=bool_value;
+            }
+            // For each motor, get q qdot and tau, and control flag
+            for (int i = 0; i < 8; ++i) {
+                std::string element_name="Q"+
+                        boost::lexical_cast<std::string>(i+1);
+                TiXmlElement* Qi=Cables_FB->FirstChildElement(element_name);
+                if(Qi)
+                {
+                    TiXmlElement* Controlled=Qi->FirstChildElement("Controlled");
+                    TiXmlElement* Position_i=Qi->FirstChildElement("Position");
+                    TiXmlElement* Velocity_i=Qi->FirstChildElement("Vitesse");
+                    TiXmlElement* Torque_i=Qi->FirstChildElement("Couple");
+                    if(Controlled)
+                    {
+                        check_attribute(Controlled->
+                                        QueryBoolAttribute("V",&bool_value));
+                        Motor_Control[i]=bool_value;
+
+                    }
+                    if(Position_i)
+                    {
+                       // std::cout<<"Getting position"<<std::endl;
+                        check_attribute(Position_i->
+                                        QueryFloatAttribute("V",&float_value));
+                        robot_state.position[i]=float_value;
+
+                    }
+                    if(Velocity_i)
+                    {
+                        check_attribute(Velocity_i->
+                                        QueryFloatAttribute("V",&float_value));
+                        robot_state.velocity[i]=float_value;
+                    }
+                    if(Torque_i)
+                    {
+                        check_attribute(Torque_i->
+                                        QueryFloatAttribute("V",&float_value));
+                        robot_state.effort[i]=float_value;
+                    }
+                }
+
+            }
         }
+
     }
 }
 
-void BRrobot::extract_robot_state(TiXmlElement* root,std::string State)
+
+void BRrobot::check_attribute(int attribute)
 {
-    double d=-1.0;
-    for (int counter =0; counter < 8; ++counter) {
-
-        std::string value="M"+boost::lexical_cast<std::string>(counter+1);
-        switch (root->QueryDoubleAttribute(value,&d)) {
-        case TIXML_NO_ATTRIBUTE:
-            std::cout<<"TIXML_NO_ATTRIBUTE"<<std::endl;
-            break;
-        case TIXML_WRONG_TYPE:
-            std::cout<<"TIXML_WRONG_TYPE"<<std::endl;
-            break;
-        case 0:
-            if(State=="Position")
-            {
-                robot_state.position[counter]=d;
-            }
-            else if(State=="Velocity")
-            {
-                robot_state.velocity[counter]=d;
-            }
-            else if(State=="Torque")
-            {
-                robot_state.effort[counter]=d;
-            }
-            else
-            {
-                ROS_ERROR("Error defining data type");
-            }
-
-            break;
-        default:
-            break;
-        }
+    switch (attribute){
+    case TIXML_NO_ATTRIBUTE:
+        std::cout<<"TIXML_NO_ATTRIBUTE"<<std::endl;
+        break;
+    case TIXML_WRONG_TYPE:
+        std::cout<<"TIXML_WRONG_TYPE"<<std::endl;
+        break;
+    case TIXML_SUCCESS:
+        break;
+    default:
+        ROS_INFO("who knows");
     }
 }
+
+
+//void BRrobot::unpack_message(std::string p)
+//{
+
+//    TiXmlDocument doc;
+//    TiXmlElement* root;
+//    const char* pTest =doc.Parse(p.c_str(), 0, TIXML_ENCODING_UTF8);
+//    std::vector<std::string> data;
+//    data.push_back("Position");
+//    data.push_back("Velocity");
+//    data.push_back("Torque");
+
+//    for (int i = 0; i < 3; ++i) {
+//        root = doc.FirstChildElement( data[i]);
+//        if(root)
+//        {
+//            extract_robot_state(root,data[i]);
+//        }
+//    }
+//}
+
+//void BRrobot::extract_robot_state(TiXmlElement* root,std::string State)
+//{
+//    double d=-1.0;
+//    for (int counter =0; counter < 8; ++counter) {
+
+//        std::string value="q"+boost::lexical_cast<std::string>(counter+1);
+//        switch (root->QueryDoubleAttribute(value,&d)) {
+//        case TIXML_NO_ATTRIBUTE:
+//            std::cout<<"TIXML_NO_ATTRIBUTE"<<std::endl;
+//            break;
+//        case TIXML_WRONG_TYPE:
+//            std::cout<<"TIXML_WRONG_TYPE"<<std::endl;
+//            break;
+//        case 0:
+//            if(State=="Position")
+//            {
+//                robot_state.position[counter]=d;
+//            }
+//            else if(State=="Velocity")
+//            {
+//                robot_state.velocity[counter]=d;
+//            }
+//            else if(State=="Torque")
+//            {
+//                robot_state.effort[counter]=d;
+//            }
+//            else
+//            {
+//                ROS_ERROR("Error defining data type");
+//            }
+
+//            break;
+//        default:
+//            break;
+//        }
+//    }
+//}
+
+
+std::string BRrobot::pack_joint_message()
+{
+    double q[8]; // converted deviation joint position
+    double tau[8]; // converted torque
+    std::string message=" ";
+
+
+    if(desired_joint_position.position.size()==robot_state.position.size())
+    {
+        //ROS_INFO_COND(debug_,"joint name check");
+
+        if(desired_joint_position.name!=robot_state.name)
+        {
+          //  ROS_INFO_COND(debug_,"In if loop");
+            // Assign Joints according to index
+            for (int i = 0; i < 8; ++i) {
+                for (int j = 0; j < 8; ++j) {
+                    if(robot_state.name[i]==desired_joint_position.name[j])
+                    {
+                        q[i]=desired_joint_position.position[j];
+                        tau[i]=desired_joint_position.effort[j];
+                    }
+                }
+            }
+        }
+        else // Assign Joints in simple manner
+        {
+            for (int var = 0; var < 8; ++var) {
+                q[var]=desired_joint_position.position[var];
+                tau[var]=desired_joint_position.effort[var];
+            }
+        }
+      //  ROS_INFO_COND(debug_,"Creating Document");
+        float floatvalue;
+        TiXmlDocument doc;
+        TiXmlElement* ROS_PLC=new TiXmlElement("ROS_PLC");
+        TiXmlElement* Cables_xml=new TiXmlElement("Cables");
+
+        doc.LinkEndChild(ROS_PLC);
+        ROS_PLC->LinkEndChild(Cables_xml);
+
+        for (int i = 0; i < 8; ++i) {
+            std::string element_name="Q"+
+                    boost::lexical_cast<std::string>(i+1);
+            TiXmlElement* Qi=new TiXmlElement(element_name);
+            TiXmlElement* Position=new TiXmlElement("Position");
+            TiXmlElement* Torque=new TiXmlElement("Couple");
+            floatvalue=q[i];
+            Position->SetAttribute("V",boost::lexical_cast<std::string>(floatvalue));
+            floatvalue=tau[i];
+            Torque->SetAttribute("V",boost::lexical_cast<std::string>(floatvalue));
+            Cables_xml->LinkEndChild(Qi);
+            Qi->LinkEndChild(Position);
+            Qi->LinkEndChild(Torque);
+        }
+
+
+        TiXmlPrinter printer;
+        //doc.Print();
+        doc.Accept( &printer );
+        message = printer.CStr();
+        //std::cout<<"message "<<message<<std::endl;
+    }
+    else
+    {
+        message="\0";
+    }
+    return message;
+
+}
+
 
 void BRrobot::writeData() // function to start commuinication
 {
@@ -265,48 +417,29 @@ void BRrobot::writeData() // function to start commuinication
     {
         timeout.tv_sec = 0; //do this each loop as selects modifies timeout
         timeout.tv_usec = 500000; // timeout of 0.5 sec
-        /* Details about select function :
-        The select() function gives you a way to simultaneously
-        check multiple sockets to see if they have data waiting to
-        be recv()d, or if you can send() data to them without blocking,
-        or if some exception has occurred. You populate your sets of socket
-        descriptors using the macros, like FD_SET(), above. Once you have the
-        set, you pass it into the function as one of the following parameters:
-        readfds if you want to know when any of the sockets in the set is ready
-        to recv() data, writefds if any of the sockets is ready to send() data to,
-        and/or exceptfds if you need to know when an exception (error) occurs on any of
-        the sockets. Any or all of these parameters can be NULL if you're not interested
-        in those types of events. After select() returns, the values in the sets will
-        be changed to show which are ready for reading or writing, and which have exceptions.
-        The first parameter, n is the highest-numbered socket descriptor (they're just ints,
-        remember?) plus one. Lastly, the struct timeval, timeout, at the end—this lets you
-        tell select() how long to check these sets for.
-        It'll return after the timeout, or when an event occurs, whichever is first.
-        The struct timeval has two fields: tv_sec is the number of seconds, to which is
-        added tv_usec, the number of microseconds (1,000,000 microseconds in a second.)
-         */
+
         select(new_sockfd_ + 1, &writefds, NULL, NULL, &timeout);
         boost::lexical_cast<std::string>(counter);
         char const * msg;
 
         if(GetJointFlag())
         {
+
             SetJointFlag(false); // Reset the joint flag
+
             message=pack_joint_message();
+            //std::cout<<"Sending="<<message<<std::endl;
             msg=message.c_str();
-        }
-        else
-        {
-            msg="-1\n\0";
-        }
 
-        n = write(new_sockfd_,msg,strlen(msg));
 
-        if (n < 0)
-        {
-            ROS_ERROR("ERROR writing to socket");
-            SetStatus(robot_status::DISCONNECTING);
+            n = write(new_sockfd_,msg,strlen(msg));
 
+            if (n < 0)
+            {
+                ROS_ERROR("ERROR writing to socket");
+                SetStatus(robot_status::DISCONNECTING);
+
+            }
         }
 
     }
@@ -314,42 +447,6 @@ void BRrobot::writeData() // function to start commuinication
 }
 
 
-
-// packaging up the data
-std::string BRrobot::pack_joint_message()
-{
-    double q[8]; // converted deviation joint position
-    std::string message=" ";
-    if(desired_joint_deviation.name!=robot_state.name)
-    {
-        // Assign Joints according to index
-        for (int i = 0; i < 8; ++i) {
-            for (int j = 0; j < 8; ++j) {
-                if(robot_state.name[i]==desired_joint_deviation.name[j])
-                {
-                    q[i]=desired_joint_deviation.position[j];
-                }
-            }
-        }
-    }
-    else // Assign Joints in simple manner
-    {
-        for (int var = 0; var < 8; ++var) {
-            q[var]=desired_joint_deviation.position[var];
-        }
-    }
-
-    message="< Position ";
-
-    for (int i = 0; i < 8; ++i) {
-        message=message + robot_state.name[i] + " =\""+ boost::str(boost::format("%.2f") % q[i])+"\" ";
-    }
-    message=message +"/>\n\0";
-
-
-    return message;
-
-}
 
 
 void BRrobot::statePublisher()
@@ -366,8 +463,7 @@ void BRrobot::statePublisher()
 
 void BRrobot::JointDeviationCallback(const sensor_msgs::JointState::ConstPtr& msg)
 {
-    desired_joint_deviation=*msg; // joint is eqaul to the value pointed to by msg
-
+    desired_joint_position=*msg; // joint is eqaul to the value pointed to by msg
     this->SetJointFlag(true); // Note that value has been receieved
 }
 

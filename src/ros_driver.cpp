@@ -56,6 +56,8 @@ int main(int argc, char **argv) {
 
     while(ros::ok())
     {
+//        ROS_INFO("in loop");
+
         switch (interface.GetStatus()) {
         case interface.PENDING_CONNECTION:
             if(!interface.startCommuinication())
@@ -64,7 +66,7 @@ int main(int argc, char **argv) {
             }
             break;
         case interface.CONNECTED:
-            // Do nothing
+            //ROS_INFO("Connected");
             break;
         case interface.CONNECTING:
             ROS_INFO("Connecting to Client");
@@ -78,6 +80,7 @@ int main(int argc, char **argv) {
             ros::Duration(0.1).sleep();
             break;
         default:
+            ROS_INFO("Default case");
             break;
         }
 

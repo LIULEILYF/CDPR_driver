@@ -25,7 +25,7 @@ find_package(TinyXML REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(VISP REQUIRED)
-find_library(VISP_LIBRARY NAMES visp HINTS ${VISP_LIBRARY_DIRS} )
+find_library(VISP_LIBRARIES NAMES visp HINTS ${VISP_LIBRARY_DIRS} )
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -155,7 +155,8 @@ include_directories(
 # add_dependencies(br_driver ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_library(br_robot src/br_robot.cpp)
-add_library(${PROJECT_NAME} src/ros_driver.cpp include/br_driver/br_robot.h)
+add_library(controller_class src/controller_class.cpp)
+add_library(${PROJECT_NAME} src/ros_driver.cpp include/br_driver/br_robot.h include/br_driver/controller_class.h )
 
 ## Declare a C++ executable
 
@@ -163,21 +164,32 @@ add_library(${PROJECT_NAME} src/ros_driver.cpp include/br_driver/br_robot.h)
 add_executable(ros_driver src/ros_driver.cpp)
 target_link_libraries(ros_driver br_robot ${catkin_LIBRARIES} ${TinyXML_LIBRARIES})
 
+add_executable(tf_estim src/tf_estim.cpp)
+target_link_libraries(tf_estim controller_class ${catkin_LIBRARIES} ${VISP_LIBRARIES} ${TinyXML_LIBRARIES})
+
 add_executable(client_sample src/client_sample.cpp)
 target_link_libraries(client_sample ${catkin_LIBRARIES})
 
 add_executable(client_sample_publish src/client_sample_publish.cpp)
 target_link_libraries(client_sample_publish ${catkin_LIBRARIES} ${TinyXML_LIBRARIES})
 
+add_executable(robot_simulator src/robot_simulator.cpp)
+target_link_libraries(robot_simulator ${catkin_LIBRARIES} ${TinyXML_LIBRARIES})
+
 add_executable(server_sample src/server_sample.cpp)
 target_link_libraries(server_sample ${catkin_LIBRARIES} )
 
 add_executable(simple_controller src/simple_controller.cpp)
-target_link_libraries(simple_controller ${catkin_LIBRARIES} )
+target_link_libraries(simple_controller controller_class ${catkin_LIBRARIES} ${VISP_LIBRARIES})
 
 add_executable(br_controller src/br_controller.cpp)
-target_link_libraries(br_controller ${catkin_LIBRARIES} ${VISP_LIBRARY})
+target_link_libraries(br_controller controller_class ${catkin_LIBRARIES} ${VISP_LIBRARIES})
 
+add_executable(trajectory_controller src/trajectory_controller.cpp)
+target_link_libraries(trajectory_controller controller_class ${catkin_LIBRARIES} ${VISP_LIBRARIES})
+
+add_executable(cartesian_controller src/cartesian_controller.cpp)
+target_link_libraries(cartesian_controller controller_class ${catkin_LIBRARIES} ${VISP_LIBRARIES})
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
