@@ -1,10 +1,1 @@
-Can I move the robot simply with goto position
-
-I can move the motors in position the problem was too high a gain in B&R. 
-The next step si to move in Cartesian State.
-
-
-Note the robots parameters and the intial platform position are stored in robot_parameters.yaml . After which we use integration to find the new joint limits.
-
-The idea is to recieve a Cartesian position do a simple open loop controller, the intergration of the position is completed simply using 
-the jacobian matrix of the robot. It should be ok. This is first version afterwards 
+Controller for cable driven parallel robot
